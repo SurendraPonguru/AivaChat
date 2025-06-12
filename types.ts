@@ -27,3 +27,9 @@ export interface ToastMessage {
   message: string;
   type: 'error' | 'success' | 'info';
 }
+
+export interface User {
+  id: string; // For mock purposes, can be the email or a generated ID
+  email: string;
+  // Add other user-specific fields if needed
+}

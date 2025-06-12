@@ -1,13 +1,18 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { GoogleGenAI, Chat, Content } from "@google/genai";
-import { ChatMessage, StoredChatSession, StoredChatMessage, ToastMessage } from './types';
+import { ChatMessage, StoredChatSession, StoredChatMessage, ToastMessage, User } from './types';
 import ChatWindow from './components/ChatWindow';
 import MessageInput from './components/MessageInput';
 import Sidebar from './components/Sidebar';
 import Toast from './components/Toast';
 import PageLoader from './components/PageLoader';
+import AuthPage from './components/auth/AuthPage';
 import { loadChatsFromStorage, saveChatsToStorage, generateChatId, convertMessagesToApiHistory, getChatTitle } from './utils/chatHistory';
+
+const initialGuestMessageContent = "Hello! I'm Aiva ✨. You're currently chatting as a guest. This conversation won't be saved. Log in or sign up to save your chats, create new ones, and access your history!";
+const initialGuestMessageIdPrefix = 'bot-guest-initial-';
+const initialBotMessageIdPrefix = 'bot-initial-'; // For authenticated users' new chats
 
 const App: React.FC = () => {
   const [allChats, setAllChats] = useState<StoredChatSession[]>([]);
@@ -20,6 +25,19 @@ const App: React.FC = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [isAppLoading, setIsAppLoading] = useState(true);
+
+  // Authentication state
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [authFlowTriggered, setAuthFlowTriggered] = useState<boolean>(false);
+
+  const getInitialGuestMessage = useCallback((): ChatMessage => ({
+    id: `${initialGuestMessageIdPrefix}${Date.now()}`,
+    text: initialGuestMessageContent,
+    sender: 'bot',
+    timestamp: new Date(),
+  }), []);
+
 
   const ai = useMemo(() => {
     if (process.env.API_KEY) {
@@ -47,8 +65,8 @@ const App: React.FC = () => {
 
   const initializeChatSession = useCallback((history?: Content[]) => {
     if (!ai) {
-      if (!process.env.API_KEY) {
-        // This specific error is handled by apiKeyError already
+      if (!process.env.API_KEY && !apiKeyError) {
+         setApiKeyError("API Key is missing. AI Service cannot be initialized.");
       }
       return null;
     }
@@ -67,13 +85,22 @@ const App: React.FC = () => {
       addToast(`Chat Session Error: ${errorMessage}`, 'error');
       return null;
     }
-  }, [ai, addToast]);
+  }, [ai, addToast, apiKeyError]);
 
-  const createInitialNewChat = useCallback(() => {
+  const setupGuestSession = useCallback(() => {
+    setActiveChatId("guest-active-chat");
+    setCurrentMessages([getInitialGuestMessage()]);
+    setChatSession(initializeChatSession()); // Initialize with no history for guest
+    setAllChats([]); // Guests don't have stored chats
+    setError(null);
+  }, [getInitialGuestMessage, initializeChatSession]);
+  
+
+  const createInitialNewChatForUser = useCallback((userIdForStorage: string) => {
     const newChatId = generateChatId();
     const now = new Date();
     const initialBotMessage: StoredChatMessage = {
-      id: `bot-initial-${Date.now()}`,
+      id: `${initialBotMessageIdPrefix}${Date.now()}`,
       text: "Hello! I'm Aiva ✨. Your AI Virtual Assistant for AivaChat. How can I assist you today?",
       sender: 'bot',
       timestamp: now.toISOString(),
@@ -87,7 +114,7 @@ const App: React.FC = () => {
 
     setAllChats(prevAllChats => {
       const updatedChats = [newChatSessionData, ...prevAllChats.filter(c => c.id !== newChatId)];
-      saveChatsToStorage(updatedChats);
+      saveChatsToStorage(updatedChats, userIdForStorage);
       return updatedChats;
     });
     setActiveChatId(newChatId);
@@ -95,102 +122,85 @@ const App: React.FC = () => {
   }, [setAllChats, setActiveChatId, setError]);
 
 
-  const handleNewChat = useCallback((saveOldChat = true) => {
-    const newChatId = generateChatId();
-    const now = new Date();
-    const initialBotMessage: ChatMessage = {
-      id: `bot-initial-${Date.now()}`,
-      text: "Hello! I'm Aiva ✨. Your AI Virtual Assistant for AivaChat. How can I assist you today?",
-      sender: 'bot',
-      timestamp: now,
-    };
-
-    const newChatSessionData: StoredChatSession = {
-      id: newChatId,
-      title: 'New Chat',
-      messages: [{ ...initialBotMessage, timestamp: now.toISOString() }],
-      createdAt: now.toISOString(),
-    };
-
-    setAllChats(prevAllChats => {
-      let chatsToProcess = [...prevAllChats];
-
-      if (saveOldChat && activeChatId) {
-        const activeChatIndex = chatsToProcess.findIndex(chat => chat.id === activeChatId);
-        if (activeChatIndex !== -1) {
-            const chatToSave = chatsToProcess[activeChatIndex];
-            const nonInitialOrUserMessages = currentMessages.filter(msg => !msg.id.startsWith('bot-initial-') || msg.sender === 'user');
-            const hasMeaningfulContentToSave = nonInitialOrUserMessages.length > 0;
-
-            if (hasMeaningfulContentToSave) {
-                const storedMessages: StoredChatMessage[] = currentMessages.map(msg => ({
-                    id: msg.id, text: msg.text, sender: msg.sender, timestamp: msg.timestamp.toISOString(),
-                }));
-                const updatedChatToSave: StoredChatSession = {
-                    ...chatToSave,
-                    messages: storedMessages,
-                    title: getChatTitle(storedMessages, chatToSave.title),
-                };
-                chatsToProcess = chatsToProcess.map(chat =>
-                    chat.id === activeChatId ? updatedChatToSave : chat
-                );
-            }
-        }
-      }
-      const finalChats = [newChatSessionData, ...chatsToProcess.filter(c => c.id !== newChatId)];
-      saveChatsToStorage(finalChats);
-      return finalChats;
-    });
-
-    setActiveChatId(newChatId);
-    setError(null);
-  }, [activeChatId, currentMessages, setAllChats, setActiveChatId, setError]);
-
-
-  useEffect(() => {
-    setIsAppLoading(true);
-
-    if (!process.env.API_KEY) {
-      console.error("API_KEY environment variable not set.");
-      setApiKeyError("API Key is missing. Please ensure the API_KEY environment variable is set in your environment.");
-      setIsAppLoading(false);
+  const handleNewChat = useCallback(() => {
+    if (!isAuthenticated || !currentUser) {
+      addToast("Please login or sign up to create new chats and save your history.", 'info');
+      setAuthFlowTriggered(true);
       return;
     }
 
-    if (!ai && apiKeyError) {
-        setIsAppLoading(false);
-        return;
+    if (activeChatId) {
+       setAllChats(prevAllChats => {
+            const activeChatIndex = prevAllChats.findIndex(chat => chat.id === activeChatId);
+            if (activeChatIndex !== -1) {
+                const chatToSave = prevAllChats[activeChatIndex];
+                const nonInitialOrUserMessages = currentMessages.filter(msg => 
+                    !(msg.id.startsWith(initialBotMessageIdPrefix) || msg.id.startsWith(initialGuestMessageIdPrefix)) || msg.sender === 'user'
+                );
+                const hasMeaningfulContentToSave = nonInitialOrUserMessages.length > 0;
+
+                if (hasMeaningfulContentToSave) {
+                    const storedMessages: StoredChatMessage[] = currentMessages.map(msg => ({
+                        id: msg.id, text: msg.text, sender: msg.sender, timestamp: msg.timestamp.toISOString(),
+                    }));
+                    const updatedChatToSave: StoredChatSession = {
+                        ...chatToSave,
+                        messages: storedMessages,
+                        title: getChatTitle(storedMessages, chatToSave.title),
+                    };
+                    const updatedChats = prevAllChats.map(chat =>
+                        chat.id === activeChatId ? updatedChatToSave : chat
+                    );
+                    if (currentUser) saveChatsToStorage(updatedChats, currentUser.id);
+                    return updatedChats;
+                }
+            }
+            return prevAllChats;
+       });
     }
     
-    const loadedChats = loadChatsFromStorage();
-    setAllChats(loadedChats); // Set all chats first
+    createInitialNewChatForUser(currentUser.id);
 
-    if (loadedChats.length > 0) {
-      // setActiveChatId will be handled by the dedicated useEffect for activeChatId management
-    } else {
-      // createInitialNewChat will be handled by the dedicated useEffect as well
-    }
-    setIsAppLoading(false);
-  }, [ai, apiKeyError]); // Removed createInitialNewChat, setAllChats, setActiveChatId
+  }, [isAuthenticated, currentUser, activeChatId, currentMessages, createInitialNewChatForUser, addToast, setAllChats]);
 
-  // Effect to manage activeChatId validity and ensure one is always selected or created
   useEffect(() => {
-    if (isAppLoading) return; // Don't run this effect until initial loading is done
-
-    if (!activeChatId && allChats.length === 0) {
-        createInitialNewChat();
-    } else if (activeChatId && !allChats.find(chat => chat.id === activeChatId) && allChats.length > 0) {
-        console.warn(`Stale activeChatId ${activeChatId} detected. Resetting to most recent chat.`);
-        const sortedChats = [...allChats].sort((a,b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-        setActiveChatId(sortedChats[0].id);
-    } else if (!activeChatId && allChats.length > 0) {
-        const sortedChats = [...allChats].sort((a,b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-        setActiveChatId(sortedChats[0].id);
+    setIsAppLoading(true);
+    if (!process.env.API_KEY) {
+      console.error("API_KEY environment variable not set.");
+      setApiKeyError("API Key is missing. Please ensure the API_KEY environment variable is set in your environment.");
+    } else if (!ai && !apiKeyError) {
+        setApiKeyError("AI Service failed to initialize. Please check your API key and network.");
     }
-  }, [activeChatId, allChats, createInitialNewChat, setActiveChatId, isAppLoading]);
+    // Initial setup for guest or authenticated user will be handled in the next effect
+    setIsAppLoading(false);
+  }, [ai, apiKeyError]);
 
+  useEffect(() => {
+    if (authFlowTriggered) { // If auth flow is active, don't change chat states
+        return;
+    }
 
-  // Effect to load messages for the active chat and initialize the AI chat session
+    if (!isAuthenticated || !currentUser) {
+      // Setup for guest or after logout
+      setupGuestSession();
+    } else {
+      // Authenticated user: load their chats
+      const loadedChats = loadChatsFromStorage(currentUser.id);
+      setAllChats(loadedChats);
+
+      if (loadedChats.length === 0) {
+        createInitialNewChatForUser(currentUser.id);
+      } else {
+        const activeChatExists = activeChatId && loadedChats.find(chat => chat.id === activeChatId);
+        if (!activeChatExists || activeChatId === "guest-active-chat") { // Ensure guest chat ID isn't reused
+          const sortedChats = [...loadedChats].sort((a,b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+          setActiveChatId(sortedChats.length > 0 ? sortedChats[0].id : null);
+        }
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps  
+  }, [isAuthenticated, currentUser, authFlowTriggered, setupGuestSession, createInitialNewChatForUser]); // activeChatId removed to prevent loops from its own update
+
   useEffect(() => {
     if (!activeChatId) {
         setCurrentMessages([]);
@@ -198,31 +208,52 @@ const App: React.FC = () => {
         return;
     }
 
+    if (!isAuthenticated || !currentUser) { // Guest session
+        if (activeChatId === "guest-active-chat") {
+            if (currentMessages.length === 0 || currentMessages[0].id !== getInitialGuestMessage().id ) { // Re-initialize guest message if cleared
+                setCurrentMessages([getInitialGuestMessage()]);
+            }
+            if (!chatSession) { // Ensure guest chat session is active
+                 setChatSession(initializeChatSession());
+            }
+        }
+        return;
+    }
+    
+    // Authenticated user: Load messages for their active chat
     const activeChatData = allChats.find(chat => chat.id === activeChatId);
 
     if (activeChatData) {
       const liveMessages = activeChatData.messages.map(msg => ({ ...msg, timestamp: new Date(msg.timestamp) }));
       setCurrentMessages(liveMessages);
 
-      const messagesForApiHistory = liveMessages.length === 1 && liveMessages[0].id.startsWith('bot-initial-')
-        ? []
+      const messagesForApiHistory = liveMessages.length === 1 && liveMessages[0].id.startsWith(initialBotMessageIdPrefix)
+        ? [] 
         : activeChatData.messages;
 
       const apiHistory = convertMessagesToApiHistory(messagesForApiHistory);
       const session = initializeChatSession(apiHistory);
       setChatSession(session);
     } else {
-      // This case should ideally be handled by the effect above,
-      // which ensures activeChatId is valid or creates a new chat.
-      // If it still occurs, it means there's a brief inconsistency.
       setCurrentMessages([]);
       setChatSession(null);
+      if (allChats.length > 0) {
+         const sortedChats = [...allChats].sort((a,b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+         setActiveChatId(sortedChats[0].id);
+      } else if (isAuthenticated && currentUser) {
+         createInitialNewChatForUser(currentUser.id);
+      }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeChatId, initializeChatSession]); // allChats is intentionally omitted to stabilize chatSession
+  }, [activeChatId, initializeChatSession, isAuthenticated, currentUser, getInitialGuestMessage]); // allChats and createInitialNewChatForUser omitted to prevent potential loops on initial load/creation
 
 
   const handleSelectChat = useCallback((chatId: string) => {
+    if (!isAuthenticated || !currentUser) {
+      addToast("Please login or sign up to manage chats.", 'info');
+      setAuthFlowTriggered(true);
+      return;
+    }
     if (chatId === activeChatId) return;
 
     if (activeChatId) {
@@ -230,8 +261,9 @@ const App: React.FC = () => {
             const currentActiveChatIndex = prevAllChats.findIndex(c => c.id === activeChatId);
             if (currentActiveChatIndex !== -1) {
                 const chatToSave = prevAllChats[currentActiveChatIndex];
-                // Only save if there are actual user messages or more than just the initial bot message
-                const nonInitialOrUserMessages = currentMessages.filter(msg => !msg.id.startsWith('bot-initial-') || msg.sender === 'user');
+                 const nonInitialOrUserMessages = currentMessages.filter(msg => 
+                    !(msg.id.startsWith(initialBotMessageIdPrefix) || msg.id.startsWith(initialGuestMessageIdPrefix)) || msg.sender === 'user'
+                );
                 const hasMeaningfulContentToSave = nonInitialOrUserMessages.length > 0;
 
                 if (hasMeaningfulContentToSave) {
@@ -246,7 +278,7 @@ const App: React.FC = () => {
                     const newAllChatsState = prevAllChats.map(c =>
                         c.id === activeChatId ? updatedSavedChat : c
                     );
-                    saveChatsToStorage(newAllChatsState);
+                    if (currentUser) saveChatsToStorage(newAllChatsState, currentUser.id);
                     return newAllChatsState;
                 }
             }
@@ -255,16 +287,21 @@ const App: React.FC = () => {
     }
     setActiveChatId(chatId);
     setError(null);
-  }, [activeChatId, currentMessages, setAllChats, setActiveChatId, setError]);
+  }, [activeChatId, currentMessages, currentUser, isAuthenticated, setAllChats, setActiveChatId, setError, addToast]);
 
   const handleDeleteChat = useCallback((chatIdToDelete: string) => {
+    if (!isAuthenticated || !currentUser) {
+      addToast("Please login or sign up to manage chats.", 'info');
+      setAuthFlowTriggered(true);
+      return;
+    }
     if (!window.confirm("Are you sure you want to delete this chat? This action cannot be undone.")) {
       return;
     }
 
     setAllChats(prevChats => {
       const updatedChats = prevChats.filter(chat => chat.id !== chatIdToDelete);
-      saveChatsToStorage(updatedChats);
+      saveChatsToStorage(updatedChats, currentUser.id);
 
       if (activeChatId === chatIdToDelete) {
         if (updatedChats.length > 0) {
@@ -272,17 +309,28 @@ const App: React.FC = () => {
           setActiveChatId(nextActiveChat.id);
         } else {
           setActiveChatId(null); 
+          createInitialNewChatForUser(currentUser.id);
         }
       }
       return updatedChats;
     });
-  }, [activeChatId, setAllChats, setActiveChatId]);
+  }, [activeChatId, currentUser, isAuthenticated, setAllChats, setActiveChatId, createInitialNewChatForUser, addToast]);
 
 
   const handleSendMessage = useCallback(async (inputText: string) => {
-    if (!inputText.trim() || !activeChatId) {
-      addToast("Cannot send empty message or no active chat selected.", 'error');
+    if ((!isAuthenticated || !currentUser) && activeChatId !== "guest-active-chat") { // Guest not in guest session, or user not authenticated
+      addToast("Please login or sign up to send messages and save history.", 'info');
+      setAuthFlowTriggered(true);
       return;
+    }
+
+    if (!inputText.trim()) {
+      addToast("Cannot send empty message.", 'error');
+      return;
+    }
+     if (!activeChatId && (isAuthenticated && currentUser)) { // Authenticated user with no active chat selected (should not happen with auto-select/create)
+        addToast("No active chat selected. Please select or create a new chat.", 'error');
+        return;
     }
      if (isLoading) {
         addToast("Please wait for the current response to complete.", 'info');
@@ -296,15 +344,17 @@ const App: React.FC = () => {
             return;
         }
         addToast("Chat session not ready. Attempting to re-initialize...", 'info');
-        const activeChatDataForReinit = allChats.find(chat => chat.id === activeChatId);
-        const historyForReinit = activeChatDataForReinit ? convertMessagesToApiHistory(activeChatDataForReinit.messages) : [];
+        // For authenticated users, re-init with history. For guests, re-init empty.
+        const historyForReinit = (isAuthenticated && currentUser && activeChatId && activeChatId !== "guest-active-chat")
+            ? convertMessagesToApiHistory(allChats.find(chat => chat.id === activeChatId)?.messages.filter(m => !m.id.startsWith(initialBotMessageIdPrefix)) || [])
+            : [];
         const newSession = initializeChatSession(historyForReinit);
         if (!newSession) {
-            addToast("Failed to reinitialize session. Please try starting a new chat or refreshing.", 'error');
+            addToast("Failed to reinitialize session. Please try again or refresh.", 'error');
             setIsLoading(false);
             return;
         }
-        setChatSession(newSession); // Set the new session for this send
+        setChatSession(newSession);
         currentChatSession = newSession;
     }
 
@@ -328,8 +378,9 @@ const App: React.FC = () => {
     };
 
     setCurrentMessages(prevMessages => {
-        // Replace initial bot message if it's the only one
-        if (prevMessages.length === 1 && prevMessages[0].id.startsWith('bot-initial-')) {
+        if (prevMessages.length === 1 && 
+            (prevMessages[0].id.startsWith(initialBotMessageIdPrefix) || prevMessages[0].id.startsWith(initialGuestMessageIdPrefix))
+        ) {
             return [userMessage, botPlaceholderMessage];
         }
         return [...prevMessages, userMessage, botPlaceholderMessage];
@@ -356,7 +407,7 @@ const App: React.FC = () => {
           msg.id === botMessageId ? { ...msg, text: accumulatedBotText, isStreaming: false, timestamp: finalTimestamp } : msg
         );
 
-        if (activeChatId) {
+        if (isAuthenticated && currentUser && activeChatId && activeChatId !== "guest-active-chat") {
             setAllChats(prevAll => {
                 const finalStoredMessages: StoredChatMessage[] = finalizedMessages.map(m => ({
                     id: m.id, text: m.text, sender: m.sender, timestamp: m.timestamp.toISOString()
@@ -369,7 +420,7 @@ const App: React.FC = () => {
                     ? { ...chat, messages: finalStoredMessages, title: getChatTitle(finalStoredMessages, currentTitle) }
                     : chat
                 );
-                saveChatsToStorage(updatedAll);
+                saveChatsToStorage(updatedAll, currentUser.id);
                 return updatedAll;
             });
         }
@@ -389,7 +440,7 @@ const App: React.FC = () => {
             : msg
         );
 
-        if (activeChatId) {
+        if (isAuthenticated && currentUser && activeChatId && activeChatId !== "guest-active-chat") {
             setAllChats(prevAll => {
                 const failureStoredMessages: StoredChatMessage[] = failureMessages.map(m => ({
                      id: m.id, text: m.text, sender: m.sender, timestamp: m.timestamp.toISOString()
@@ -402,7 +453,7 @@ const App: React.FC = () => {
                     ? { ...chat, messages: failureStoredMessages, title: getChatTitle(failureStoredMessages, currentTitle) }
                     : chat
                 );
-                saveChatsToStorage(updatedAll);
+                saveChatsToStorage(updatedAll, currentUser.id);
                 return updatedAll;
             });
         }
@@ -412,15 +463,18 @@ const App: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [isLoading, chatSession, activeChatId, apiKeyError, allChats, ai, initializeChatSession, addToast, setAllChats, setError, setCurrentMessages, setChatSession]);
+  }, [isLoading, chatSession, activeChatId, apiKeyError, allChats, ai, initializeChatSession, addToast, setAllChats, setError, setCurrentMessages, setChatSession, currentUser, isAuthenticated]);
 
 
   useEffect(() => {
     const handleBeforeUnloadLogic = () => {
-      if (activeChatId && currentMessages.length > 0) {
-        const nonInitialOrUserMessages = currentMessages.filter(msg => !msg.id.startsWith('bot-initial-') || msg.sender === 'user');
-        if (nonInitialOrUserMessages.length > 0) { // Only save if meaningful content
-           setAllChats(prevChats => {
+      // Only save if authenticated and there are messages in an active chat
+      if (isAuthenticated && currentUser && activeChatId && activeChatId !== "guest-active-chat" && currentMessages.length > 0) {
+        const nonInitialOrUserMessages = currentMessages.filter(msg => 
+            !(msg.id.startsWith(initialBotMessageIdPrefix) || msg.id.startsWith(initialGuestMessageIdPrefix)) || msg.sender === 'user'
+        );
+        if (nonInitialOrUserMessages.length > 0) {
+           setAllChats(prevChats => { 
                 const activeChatData = prevChats.find(chat => chat.id === activeChatId);
                 if (!activeChatData) return prevChats;
 
@@ -430,8 +484,8 @@ const App: React.FC = () => {
                 const updatedChats = prevChats.map(chat =>
                     chat.id === activeChatId ? { ...chat, title: getChatTitle(storedMessages, chat.title), messages: storedMessages } : chat
                 );
-                saveChatsToStorage(updatedChats);
-                return updatedChats; // This return is for setAllChats, doesn't affect beforeunload itself
+                saveChatsToStorage(updatedChats, currentUser.id);
+                return updatedChats;
             });
         }
       }
@@ -439,11 +493,39 @@ const App: React.FC = () => {
     window.addEventListener('beforeunload', handleBeforeUnloadLogic);
     return () => {
       window.removeEventListener('beforeunload', handleBeforeUnloadLogic);
-      // Attempt to save one last time when component unmounts or dependencies change,
-      // which might be too late for browser close but good for SPA navigations or HMR.
       handleBeforeUnloadLogic(); 
     };
-  }, [activeChatId, currentMessages, setAllChats]);
+  }, [activeChatId, currentMessages, setAllChats, currentUser, isAuthenticated]);
+
+
+  const handleLoginSuccess = (user: User) => {
+    setCurrentUser(user);
+    setIsAuthenticated(true);
+    setAuthFlowTriggered(false); 
+    addToast(`Welcome back, ${user.email}!`, 'success');
+    // Chat loading for authenticated user is handled by useEffect [isAuthenticated, currentUser]
+  };
+
+  const handleSignupSuccess = (user: User) => {
+    setCurrentUser(user);
+    setIsAuthenticated(true);
+    setAuthFlowTriggered(false); 
+    addToast(`Account created for ${user.email}! Welcome!`, 'success');
+     // Chat loading for authenticated user is handled by useEffect [isAuthenticated, currentUser]
+  };
+  
+  const handleLogout = () => {
+    addToast("You have been logged out.", 'info');
+    setIsAuthenticated(false);
+    setCurrentUser(null);
+    setAuthFlowTriggered(false); 
+    // setupGuestSession will be called by the useEffect watching isAuthenticated
+  };
+  
+  const handleLoginClick = () => {
+    setAuthFlowTriggered(true);
+  };
+
 
   if (isAppLoading) {
     return <PageLoader />;
@@ -455,10 +537,24 @@ const App: React.FC = () => {
         <div className="bg-slate-700 p-8 rounded-lg shadow-xl text-center">
           <h1 className="text-2xl font-bold text-red-400 mb-4">Configuration Error</h1>
           <p className="text-slate-200">{apiKeyError}</p>
-          <p className="mt-4 text-sm text-slate-400">Please check your API_KEY environment variable or contact support.</p>
+          <p className="mt-4 text-sm text-slate-400">Please ensure your API_KEY environment variable is correctly set and the AI service is accessible.</p>
         </div>
       </div>
     );
+  }
+  
+  if (authFlowTriggered && !isAuthenticated) {
+    return <AuthPage 
+        onLoginSuccess={handleLoginSuccess} 
+        onSignupSuccess={handleSignupSuccess} 
+        onCancel={() => {
+            setAuthFlowTriggered(false);
+            // If cancelling auth, ensure guest session is active if it was interrupted
+            if (!isAuthenticated) {
+                setupGuestSession();
+            }
+        }}
+    />;
   }
 
   return (
@@ -475,17 +571,21 @@ const App: React.FC = () => {
         ))}
       </div>
 
-      <div className="flex h-screen max-h-screen bg-slate-900 text-white w-full">
+      <div className="flex w-full h-screen max-h-screen bg-slate-900 text-white">
         <Sidebar
-          chatSessions={allChats}
+          isAuthenticated={isAuthenticated} 
+          chatSessions={allChats} // Will be empty for guests
           activeChatId={activeChatId}
-          onSelectChat={handleSelectChat}
-          onNewChat={() => handleNewChat(true)}
-          onDeleteChat={handleDeleteChat}
+          onSelectChat={handleSelectChat} // Will trigger auth for guests via its internal check
+          onNewChat={handleNewChat} // Will trigger auth for guests
+          onDeleteChat={handleDeleteChat} // Will trigger auth for guests
           isOpen={isSidebarOpen}
           onToggle={() => setIsSidebarOpen(!isSidebarOpen)}
+          onLogout={handleLogout}
+          onLoginClick={handleLoginClick} 
+          currentUserEmail={currentUser?.email}
         />
-        <div className="flex flex-col flex-grow h-full max-h-screen bg-slate-700 text-slate-100 min-w-0 md:w-[70%]">
+        <div className="flex flex-col flex-grow h-full max-h-screen bg-slate-700 text-slate-100 min-w-0 md:w-[calc(100%-30%)]">
           <header className="bg-gradient-to-r from-sky-600 to-teal-500 text-white p-3 shadow-md flex items-center justify-between shrink-0">
             <button
               onClick={() => setIsSidebarOpen(!isSidebarOpen)}
@@ -497,12 +597,12 @@ const App: React.FC = () => {
               </svg>
             </button>
             <h1 className="text-lg md:text-xl font-semibold text-center flex-grow">AivaChat ✨</h1>
-            <div className="w-10 md:w-0"></div> {/* Spacer for mobile button */}
+            <div className="w-10 md:hidden"></div> {/* Spacer for mobile button */}
           </header>
 
           <ChatWindow messages={currentMessages} />
 
-          {error && !apiKeyError && ( // Only show general errors if not API key error
+          {error && !apiKeyError && ( 
             <div className="bg-red-700 border-l-4 border-red-500 text-white p-3 mx-2 md:mx-4 my-2 rounded-md text-sm shadow-lg shrink-0">
               <p className="font-bold">Error:</p>
               <p>{error}</p>
@@ -511,7 +611,7 @@ const App: React.FC = () => {
 
           <MessageInput
             onSendMessage={handleSendMessage}
-            isLoading={isLoading || (!chatSession && !!ai && !apiKeyError)} // Also loading if chatSession is not ready
+            isLoading={isLoading || (!chatSession && !!ai && !apiKeyError)} // Spinner if loading, or if AI ready but session not (e.g. init error/API key error)
           />
         </div>
       </div>

@@ -2,15 +2,19 @@
 import { StoredChatSession, StoredChatMessage, ChatMessage } from '../types';
 import { Content } from '@google/genai';
 
-const CHAT_HISTORY_KEY = 'geminiChatHistory';
+const getChatHistoryKey = (userId: string): string => `geminiChatHistory_${userId}`;
 
 export const generateChatId = (): string => {
   return `chat-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
 };
 
-export const loadChatsFromStorage = (): StoredChatSession[] => {
+export const loadChatsFromStorage = (userId: string): StoredChatSession[] => {
+  if (!userId) {
+    console.warn('Attempted to load chats without a userId.');
+    return [];
+  }
   try {
-    const storedChats = localStorage.getItem(CHAT_HISTORY_KEY);
+    const storedChats = localStorage.getItem(getChatHistoryKey(userId));
     if (storedChats) {
       const parsedChats = JSON.parse(storedChats) as StoredChatSession[];
       return parsedChats.map(chat => ({
@@ -26,10 +30,14 @@ export const loadChatsFromStorage = (): StoredChatSession[] => {
   return [];
 };
 
-export const saveChatsToStorage = (chats: StoredChatSession[]): void => {
+export const saveChatsToStorage = (chats: StoredChatSession[], userId: string): void => {
+  if (!userId) {
+    console.warn('Attempted to save chats without a userId.');
+    return;
+  }
   try {
     const sortedChats = [...chats].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-    localStorage.setItem(CHAT_HISTORY_KEY, JSON.stringify(sortedChats));
+    localStorage.setItem(getChatHistoryKey(userId), JSON.stringify(sortedChats));
   } catch (error) {
     console.error('Failed to save chats to localStorage:', error);
   }
@@ -70,7 +78,6 @@ export const getChatTitle = (messages: StoredChatMessage[], currentTitle: string
     return newTitle.length === 35 ? newTitle + '...' : newTitle;
   }
 
-  // If currentTitle is 'New Chat' and it's a pristine new chat (only initial bot message), keep 'New Chat'
   if (currentTitle && currentTitle.toLowerCase() === 'new chat' && 
       messages.length === 1 && messages[0].sender === 'bot' && messages[0].id.startsWith('bot-initial-')) {
     return 'New Chat';

@@ -22,11 +22,15 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages }) => {
   }, [messages, messages.length]);
 
   // Determine if the placeholder should be shown
-  const isInitialBotMessageOnly = messages.length === 1 && messages[0].id.startsWith('bot-initial-');
-  const showPlaceholder = messages.length === 0 || isInitialBotMessageOnly;
+  const isInitialSingleBotMessage = messages.length === 1 && 
+                                    messages[0].sender === 'bot' &&
+                                    (messages[0].id.startsWith('bot-initial-') || messages[0].id.startsWith('bot-guest-initial-'));
+
+  const showPlaceholder = messages.length === 0 || isInitialSingleBotMessage;
+  
   const placeholderText = messages.length === 0 
     ? "Start a new conversation or select one from the sidebar." 
-    : (isInitialBotMessageOnly ? messages[0]?.text : "Loading chat...");
+    : (isInitialSingleBotMessage ? messages[0]?.text : "Loading chat...");
 
 
   return (
