@@ -84,55 +84,6 @@ Follow these instructions to get a copy of the project up and running on your lo
     *   The application is designed to **exclusively** use `process.env.API_KEY`. Do not modify the code to accept the API key via UI input or any other insecure method.
     *   Ensure your `.env` file (if used) is included in your `.gitignore` to prevent committing sensitive keys.
 
-### Running the Application
-
-1.  **Serve the `index.html` file:**
-    You need a local development server that can:
-    *   Serve static files.
-    *   Correctly handle ES module imports as specified in `index.html` and `index.tsx`.
-    *   (Most importantly) Provide the `API_KEY` as an environment variable accessible via `process.env.API_KEY` in the JavaScript context.
-
-    A simple way to serve files is using `npx serve`:
-    ```bash
-    npx serve .
-    ```
-    However, `npx serve` alone **will not** inject environment variables. You would need a more sophisticated development server or a build process (e.g., Vite, Parcel, Webpack) configured to handle environment variables correctly if you are not running in an environment where `process.env.API_KEY` is already defined (like a Node.js backend or a specific deployment platform).
-
-2.  **Open in browser:**
-    Once served, open the provided URL (e.g., `http://localhost:3000` or `http://localhost:5000`) in your web browser.
-
-If the API key is not configured correctly or is missing, you will see an error message on the screen.
-
-## How It Works
-
-1.  **Initialization:**
-    -   The app loads, checks for `process.env.API_KEY`.
-    -   If the key is present, it initializes the `GoogleGenAI` client.
-    -   Loads existing chat sessions from Local Storage or creates an initial new chat.
-
-2.  **User Interaction:**
-    -   The user types a message in the input field and clicks "Send" or presses Enter.
-
-3.  **Sending Message:**
-    -   The message is added to the current chat's message list with sender "user".
-    -   The UI updates to show the user's message.
-    -   A placeholder for the bot's response is shown with a typing indicator.
-
-4.  **API Call:**
-    -   The `handleSendMessage` function in `App.tsx` sends the user's message and the chat history to the Gemini API using `chat.sendMessageStream()`.
-
-5.  **Streaming Response:**
-    -   The Gemini API streams back the response in chunks.
-    -   As each chunk arrives, the bot's message text is updated in real-time in the UI.
-
-6.  **Finalizing Response:**
-    -   Once the stream ends, the bot's message is finalized.
-    -   The complete conversation (including the new user and bot messages) is saved to Local Storage.
-    -   The chat title is updated if it's a new chat or was previously generic.
-
-7.  **Chat Management:**
-    -   Users can create new chats, switch between existing chats, or delete chats. These actions update the application state and Local Storage.
-
 ## Folder Structure
 
 ```
@@ -208,8 +159,9 @@ Feel free to connect with me:
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details (if one is created).
-Alternatively, if no LICENSE file is present:
-&copy; {new Date().getFullYear()} AivaChat. © 2025 Surendra Ponguru. All rights reserved.
+<!-- This project is licensed under the MIT License - see the LICENSE file for details (if one is created).
+Alternatively, if no LICENSE file is present: -->
+<!-- &copy; {new Date().getFullYear()} AivaChat.  -->
+© 2025 Surendra Ponguru. All rights reserved.
 ```
 
