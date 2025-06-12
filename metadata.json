@@ -1,0 +1,7 @@
+
+{
+  "name": "AivaChat",
+  "description": "A responsive chatbot application powered by the Gemini API, built with React and Tailwind CSS. It allows users to engage in conversations with an AI model, featuring real-time message streaming.",
+  "requestFramePermissions": [],
+  "prompt": ""
+}

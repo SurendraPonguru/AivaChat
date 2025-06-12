@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en" class="scrollbar-thin scrollbar-thumb-slate-600 scrollbar-track-slate-800">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AivaChat ✨</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    /* Ensure html, body, and #root take full height and manage overflow */
+    html, body, #root {
+      height: 100%;
+      margin: 0;
+      /* overflow: hidden; /* Prevent global scrollbars, manage scrolling within components */
+    }
+    body {
+       display: flex; 
+       flex-direction: column;
+       background-color: #0f172a; /* bg-slate-900 for body if needed */
+       overflow-x: hidden; /* Prevent horizontal scroll on body */
+    }
+    #root {
+      display: flex; /* For the main app layout (sidebar + content) */
+      flex-grow: 1; 
+      min-height: 0; /* Important for flex children with overflow */
+      position: relative; /* For the initial loader positioning */
+    }
+
+    /* Custom scrollbar styling (Tailwind scrollbar utilities are preferred but this is a fallback) */
+    /* For Webkit browsers */
+    ::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #1e293b; /* slate-800 */
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #475569; /* slate-600 */
+      border-radius: 4px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #64748b; /* slate-500 */
+    }
+    /* For Firefox */
+    * {
+      scrollbar-width: thin;
+      scrollbar-color: #475569 #1e293b; /* thumb track */
+    }
+
+  </style>
+<script type="importmap">
+{
+  "imports": {
+    "react-dom/": "https://esm.sh/react-dom@^19.1.0/",
+    "react/": "https://esm.sh/react@^19.1.0/",
+    "react": "https://esm.sh/react@^19.1.0",
+    "@google/genai": "https://esm.sh/@google/genai@^1.4.0"
+  }
+}
+</script>
+<link rel="stylesheet" href="/index.css">
+</head>
+<body class="bg-slate-900">
+  <div id="root">
+    <style>
+      .initial-app-loader {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        position: absolute; 
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background-color: #0f172a; /* bg-slate-900 */
+        color: #cbd5e1; /* slate-300 */
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+        text-align: center;
+        z-index: 10000; /* High z-index to cover other potential early content */
+      }
+      .initial-app-loader-spinner {
+          width: 3rem; /* 48px */
+          height: 3rem;
+          margin-bottom: 1.5rem; /* Increased margin */
+          border: 4px solid rgba(203, 213, 225, 0.2); /* slate-300 with more opacity for track */
+          border-left-color: #94a3b8; /* slate-400 for spinner part */
+          border-radius: 50%;
+          animation: initial-spin 0.8s linear infinite;
+      }
+      @keyframes initial-spin {
+          to { transform: rotate(360deg); }
+      }
+    </style>
+    <div class="initial-app-loader">
+      <div class="initial-app-loader-spinner"></div>
+      <p style="font-size: 1.125rem; font-weight: 600; color: #e2e8f0; margin-bottom: 0.5rem;">Loading AivaChat ✨</p>
+      <p style="font-size: 0.875rem; color: #94a3b8;">Please wait a moment...</p>
+    </div>
+  </div>
+  <script type="module" src="/index.tsx"></script>
+</body>
+</html>
