@@ -8,12 +8,6 @@ AivaChat is a modern, responsive chatbot application powered by the Google Gemin
 
 - [Key Features](#key-features)
 - [Technologies Used](#technologies-used)
-- [Getting Started](#getting-started)
-  - [Prerequisites](#prerequisites)
-  - [Installation](#installation)
-  - [API Key Configuration](#api-key-configuration)
-  - [Running the Application](#running-the-application)
-- [How It Works](#how-it-works)
 - [Folder Structure](#folder-structure)
 - [UI/UX Design](#uiux-design)
 - [Offline Functionality](#offline-functionality)
