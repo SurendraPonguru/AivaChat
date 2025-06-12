@@ -48,41 +48,6 @@ AivaChat is a modern, responsive chatbot application powered by the Google Gemin
 - **Local Storage:** For chat history persistence.
 - **Module Bundling/Resolution:** ES Modules with import maps (as seen in `index.html`)
 
-## Getting Started
-
-Follow these instructions to get a copy of the project up and running on your local machine for development and testing purposes.
-
-### Prerequisites
-
-- A modern web browser that supports ES Modules and Local Storage.
-- An active Google Gemini API key.
-
-### Installation
-
-1.  **Clone the repository (if applicable) or download the files.**
-    ```bash
-    # If it's a git repository
-    git clone <repository-url>
-    cd aivachat
-    ```
-    If you have the files directly, simply place them in a project folder.
-
-2.  **API Key Configuration (Crucial!)**
-
-    The AivaChat application **requires** a Google Gemini API key to function. This key **must** be provided as an environment variable named `API_KEY`.
-
-    -   **How it's used:** The application code (`App.tsx`) attempts to read this key using `process.env.API_KEY`.
-    -   **Execution Environment:** Your development server or hosting environment **must** be configured to make this environment variable available to the JavaScript context at runtime.
-        -   For local development with tools like Vite or Create React App (if you adapt the project to use them), you would typically create a `.env` file in the project root:
-            ```env
-            API_KEY=YOUR_GEMINI_API_KEY_HERE
-            ```
-        -   If serving `index.html` directly with a simple HTTP server, that server or an intermediate script might need to inject this variable.
-
-    ⚠️ **Important Security Note:**
-    *   **Never** hardcode your API key directly into `index.html`, `index.tsx`, `App.tsx`, or any other frontend file.
-    *   The application is designed to **exclusively** use `process.env.API_KEY`. Do not modify the code to accept the API key via UI input or any other insecure method.
-    *   Ensure your `.env` file (if used) is included in your `.gitignore` to prevent committing sensitive keys.
 
 ## Folder Structure
 
