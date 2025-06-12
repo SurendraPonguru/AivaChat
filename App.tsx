@@ -295,9 +295,9 @@ const App: React.FC = () => {
       setAuthFlowTriggered(true);
       return;
     }
-    if (!window.confirm("Are you sure you want to delete this chat? This action cannot be undone.")) {
-      return;
-    }
+    // if (!window.confirm("Are you sure you want to delete this chat? This action cannot be undone.")) {
+    //   return;
+    // }
 
     setAllChats(prevChats => {
       const updatedChats = prevChats.filter(chat => chat.id !== chatIdToDelete);
