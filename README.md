@@ -128,5 +128,4 @@ Feel free to connect with me:
 Alternatively, if no LICENSE file is present: -->
 <!-- &copy; {new Date().getFullYear()} AivaChat.  -->
 © 2025 Surendra Ponguru. All rights reserved.
-```
 
