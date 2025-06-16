@@ -14,6 +14,15 @@ const initialGuestMessageContent = "Hello! I'm Aiva ✨. You're currently chatti
 const initialGuestMessageIdPrefix = 'bot-guest-initial-';
 const initialBotMessageIdPrefix = 'bot-initial-'; // For authenticated users' new chats
 
+interface ImportMetaEnv {
+  readonly VITE_API_KEY: string;
+  // add other variables here...
+}
+
+interface ImportMeta {
+  readonly env: ImportMetaEnv;
+}
+
 const App: React.FC = () => {
   const [allChats, setAllChats] = useState<StoredChatSession[]>([]);
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
@@ -40,9 +49,9 @@ const App: React.FC = () => {
 
 
   const ai = useMemo(() => {
-    if (process.env.API_KEY) {
+    if (import.meta.env.VITE_API_KEY) {
       try {
-        return new GoogleGenAI({ apiKey: process.env.API_KEY });
+        return new GoogleGenAI({ apiKey: import.meta.env.VITE_API_KEY });
       } catch (e) {
         console.error("Failed to initialize GoogleGenAI:", e);
         const errorMessage = e instanceof Error ? e.message : String(e);
@@ -65,7 +74,7 @@ const App: React.FC = () => {
 
   const initializeChatSession = useCallback((history?: Content[]) => {
     if (!ai) {
-      if (!process.env.API_KEY && !apiKeyError) {
+      if (!import.meta.env.VITE_API_KEY && !apiKeyError) {
          setApiKeyError("API Key is missing. AI Service cannot be initialized.");
       }
       return null;
@@ -165,7 +174,7 @@ const App: React.FC = () => {
 
   useEffect(() => {
     setIsAppLoading(true);
-    if (!process.env.API_KEY) {
+    if (!import.meta.env.VITE_API_KEY) {
       console.error("API_KEY environment variable not set.");
       setApiKeyError("API Key is missing. Please ensure the API_KEY environment variable is set in your environment.");
     } else if (!ai && !apiKeyError) {
